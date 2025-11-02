@@ -1,0 +1,109 @@
+services:
+  # PostgreSQL для основного приложения
+  postgres:
+    image: postgres:15-alpine
+    container_name: finance_postgres
+    environment:
+      POSTGRES_DB: finance_db
+      POSTGRES_USER: finance_user
+      POSTGRES_PASSWORD: finance_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - finance_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance_user -d finance_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL для Keycloak
+  keycloak_postgres:
+    image: postgres:15-alpine
+    container_name: keycloak_postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak_password
+    volumes:
+      - keycloak_postgres_data:/var/lib/postgresql/data
+    networks:
+      - finance_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Keycloak Identity Provider
+  keycloak:
+    image: quay.io/keycloak/keycloak:22.0
+    container_name: finance_keycloak
+    environment:
+      # Database
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak_postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak_password
+      
+      # Admin credentials
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin123
+      
+      # Development settings
+      KC_HOSTNAME_STRICT: false
+      KC_HOSTNAME_STRICT_HTTPS: false
+      KC_HTTP_ENABLED: true
+      
+      # Logging
+      KC_LOG_LEVEL: INFO
+    ports:
+      - "8080:8080"
+    depends_on:
+      keycloak_postgres:
+        condition: service_healthy
+    command: start-dev
+    networks:
+      - finance_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+
+  # FastAPI приложение (опционально, для полной среды)
+  finance_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: finance_app
+    environment:
+      DATABASE_URL: postgresql://finance_user:finance_password@postgres:5432/finance_db
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: finance-realm
+      KEYCLOAK_CLIENT_ID: finance-client
+      DEBUG: true
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    volumes:
+      - ./app:/app/app
+      - ./.env:/app/.env
+    networks:
+      - finance_network
+    profiles:
+      - "full"  # Запускается только с --profile full
+
+volumes:
+  postgres_data:
+  keycloak_postgres_data:
+
+networks:
+  finance_network:
+    driver: bridge

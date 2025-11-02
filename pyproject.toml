@@ -1,0 +1,117 @@
+[tool.poetry]
+name = "finance-tracker"
+version = "0.1.0"
+description = "Учебный проект: система домашнего учета финансов с OAuth авторизацией"
+authors = ["Student <student@example.com>"]
+package-mode = false
+
+# Зависимости для production
+[tool.poetry.dependencies]
+python = "^3.11"  # Минимум Python 3.11, максимум < 4.0
+
+# === WEB FRAMEWORK ===
+fastapi = "^0.104.1"          # Современный веб-фреймворк с автодокументацией
+uvicorn = {extras = ["standard"], version = "^0.24.0"}  # ASGI сервер с доп. возможностями
+
+# === DATABASE ===
+sqlalchemy = "^2.0.23"        # ORM для работы с базой данных
+psycopg2-binary = "^2.9.9"    # PostgreSQL драйвер (binary для простоты)
+alembic = "^1.12.1"           # Миграции базы данных
+
+# === AUTHENTICATION & AUTHORIZATION ===
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}  # JWT токены + криптография
+python-multipart = "^0.0.6"   # Поддержка multipart/form-data для FastAPI
+httpx = "^0.25.2"             # Async HTTP клиент для запросов к Keycloak
+cryptography = "^41.0.7"      # Криптографические функции
+
+# === DATA VALIDATION ===
+pydantic = {extras = ["email"], version = "^2.5.0"}  # Валидация данных + email поддержка
+pydantic-settings = "^2.1.0"  # Управление настройками приложения
+
+# === UTILITIES ===
+python-dateutil = "^2.8.2"    # Работа с датами
+email-validator = "^2.1.0"    # Валидация email адресов
+
+# Зависимости для разработки (не попадают в production)
+[tool.poetry.group.dev.dependencies]
+# === TESTING ===
+pytest = "^7.4.3"            # Фреймворк для тестирования
+pytest-asyncio = "^0.21.1"   # Поддержка async/await в тестах
+pytest-cov = "^4.1.0"        # Покрытие кода тестами
+httpx = "^0.25.2"            # HTTP клиент для тестирования API
+
+# === CODE QUALITY ===
+black = "^23.11.0"           # Форматирование кода
+isort = "^5.12.0"            # Сортировка импортов
+flake8 = "^6.1.0"            # Линтер для проверки кода
+mypy = "^1.7.1"              # Статическая типизация
+pre-commit = "^3.6.0"        # Git hooks для проверки кода
+
+# === DEVELOPMENT TOOLS ===
+watchfiles = "^0.21.0"       # Автоперезагрузка при изменениях
+python-dotenv = "^1.0.0"     # Загрузка переменных окружения из .env
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# Настройки для инструментов разработки
+[tool.black]
+line-length = 88              # Длина строки (стандарт Python)
+target-version = ['py311']     # Целевая версия Python
+include = '\.pyi?$'           # Файлы для форматирования
+extend-exclude = '''
+/(
+  migrations/                 # Исключаем миграции Alembic
+  | __pycache__
+  | .git
+)/
+'''
+
+[tool.isort]
+profile = "black"             # Совместимость с black
+multi_line_output = 3         # Стиль многострочных импортов
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 88
+skip_glob = ["*/migrations/*"] # Пропускаем миграции
+
+[tool.mypy]
+python_version = "3.11"
+check_untyped_defs = true
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers --strict-config"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+]
+
+# Настройки покрытия кода
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/tests/*",
+    "*/migrations/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError", 
+    "raise NotImplementedError",
+]
