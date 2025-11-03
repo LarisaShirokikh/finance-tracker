@@ -33,6 +33,7 @@ python-dateutil = "^2.8.2"    # Работа с датами
 email-validator = "^2.1.0"    # Валидация email адресов
 
 # Зависимости для разработки (не попадают в production)
+aioredis = "^2.0.1"
 [tool.poetry.group.dev.dependencies]
 # === TESTING ===
 pytest = "^7.4.3"            # Фреймворк для тестирования

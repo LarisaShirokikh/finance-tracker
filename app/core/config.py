@@ -1,136 +1,190 @@
 """
-Конфигурация приложения Finance Tracker
+Finance Tracker Application Configuration
 
-Использует Pydantic Settings для автоматической валидации
-и загрузки переменных окружения из .env файла.
+Uses Pydantic Settings for automatic validation
+and loading environment variables from .env file.
 
-Принципы:
-1. Все настройки в одном месте
-2. Валидация типов автоматически  
-3. Переменные окружения перезаписывают значения по умолчанию
-4. Разные настройки для dev/test/prod
+Principles:
+1. All settings in one place
+2. Automatic type validation
+3. Environment variables override defaults
+4. Different settings for dev/test/prod
 """
 
 from typing import List, Optional
-from pydantic import Field, validator
+from pydantic import Field, field_validator, validator
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     """
-    Настройки приложения с автоматической загрузкой из переменных окружения
+    Application settings with automatic loading from environment variables
     
-    Pydantic Settings автоматически:
-    - Читает .env файл
-    - Преобразует типы данных
-    - Валидирует значения
-    - Перезаписывает переменными окружения
+    Pydantic Settings automatically:
+    - Reads .env file
+    - Converts data types
+    - Validates values
+    - Overrides with environment variables
     """
     
-    # === ОСНОВНЫЕ НАСТРОЙКИ ===
-    project_name: str = Field(default="Finance Tracker", description="Название проекта")
-    debug: bool = Field(default=False, description="Режим отладки")
-    api_v1_prefix: str = Field(default="/api/v1", description="Префикс для API v1")
+    # === MAIN SETTINGS ===
+    project_name: str = Field(default="Finance Tracker", description="Project name")
+    debug: bool = Field(default=False, description="Debug mode")
+    api_v1_prefix: str = Field(default="/api/v1", description="API v1 prefix")
     
-    # === БАЗА ДАННЫХ ===
+    # === DATABASE ===
     database_url: str = Field(
         default="postgresql://finance_user:finance_password@localhost:5432/finance_db",
-        description="URL подключения к PostgreSQL"
+        description="PostgreSQL connection URL"
     )
     
-    # === KEYCLOAK НАСТРОЙКИ ===
+    # === KEYCLOAK SETTINGS ===
     keycloak_url: str = Field(
         default="http://localhost:8080", 
-        description="URL Keycloak сервера"
+        description="Keycloak server URL"
     )
     keycloak_realm: str = Field(
         default="finance-realm",
-        description="Realm в Keycloak для нашего приложения"
+        description="Keycloak realm for our application"
     )
     keycloak_client_id: str = Field(
         default="finance-client",
-        description="Client ID в Keycloak"
+        description="Keycloak client ID"
     )
     keycloak_client_secret: Optional[str] = Field(
         default=None,
-        description="Client Secret (опционально для публичных клиентов)"
+        description="Client secret (optional for public clients)"
     )
     
-    # === JWT НАСТРОЙКИ ===
+    # === JWT SETTINGS ===
     jwt_algorithm: str = Field(
         default="RS256",
-        description="Алгоритм для JWT (RS256 для Keycloak)"
+        description="JWT algorithm (RS256 for Keycloak)"
     )
     access_token_expire_minutes: int = Field(
         default=30,
-        description="Время жизни access токена в минутах"
+        description="Access token lifetime in minutes"
     )
     refresh_token_expire_days: int = Field(
         default=7,
-        description="Время жизни refresh токена в днях"
+        description="Refresh token lifetime in days"
+    )
+
+    # === REDIS CONFIGURATION ===
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        env="REDIS_URL",
+        description="Redis connection URL for caching and sessions"
+    )
+    redis_password: str = Field(
+        default="",
+        env="REDIS_PASSWORD", 
+        description="Redis password"
+    )
+    redis_db: int = Field(
+        default=0,
+        env="REDIS_DB",
+        description="Redis database number (0-15)"
+    )
+    redis_max_connections: int = Field(
+        default=20,
+        env="REDIS_MAX_CONNECTIONS",
+        description="Maximum Redis connections in pool"
     )
     
-    # === БЕЗОПАСНОСТЬ ===
+    # Cache timeouts (in seconds)
+    oauth_state_ttl: int = Field(
+        default=600,  # 10 minutes
+        env="OAUTH_STATE_TTL",
+        description="OAuth state expiration time in seconds"
+    )
+    keycloak_jwks_cache_ttl: int = Field(
+        default=3600,  # 1 hour
+        env="KEYCLOAK_JWKS_CACHE_TTL", 
+        description="Keycloak JWKS cache time in seconds"
+    )
+    refresh_token_ttl: int = Field(
+        default=2592000,  # 30 days
+        env="REFRESH_TOKEN_TTL",
+        description="Refresh token TTL in seconds"
+    )
+    token_blacklist_ttl: int = Field(
+        default=86400,  # 24 hours
+        env="TOKEN_BLACKLIST_TTL",
+        description="How long to keep blacklisted tokens in Redis"
+    )
+    
+    # === SECURITY ===
     secret_key: str = Field(
         default="change-this-secret-key-in-production",
-        description="Секретный ключ для подписи сессий"
+        description="Secret key for session signing"
     )
     
     # === CORS ===
     allowed_origins: List[str] = Field(
         default=["http://localhost:3000", "http://localhost:8000"],
-        description="Разрешенные origins для CORS"
+        description="Allowed origins for CORS"
     )
     
-    # === ЛОГИРОВАНИЕ ===
+    # === LOGGING ===
     log_level: str = Field(
         default="INFO",
-        description="Уровень логирования"
+        description="Logging level"
     )
     
-    @validator("database_url")
+    @field_validator("database_url")
     def validate_database_url(cls, v):
-        """Проверяем, что URL базы данных корректен"""
+        """Validate that database URL is correct"""
         if not v.startswith("postgresql://"):
-            raise ValueError("Database URL должен начинаться с postgresql://")
+            raise ValueError("Database URL must start with postgresql://")
         return v
     
-    @validator("keycloak_url")
+    @field_validator("keycloak_url")
     def validate_keycloak_url(cls, v):
-        """Проверяем, что URL Keycloak корректен"""
+        """Validate that Keycloak URL is correct"""
         if not (v.startswith("http://") or v.startswith("https://")):
-            raise ValueError("Keycloak URL должен начинаться с http:// или https://")
+            raise ValueError("Keycloak URL must start with http:// or https://")
         return v
     
-    @validator("log_level")
+    @field_validator("log_level")
     def validate_log_level(cls, v):
-        """Проверяем уровень логирования"""
+        """Validate logging level"""
         allowed_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
         if v.upper() not in allowed_levels:
-            raise ValueError(f"Log level должен быть одним из: {allowed_levels}")
+            raise ValueError(f"Log level must be one of: {allowed_levels}")
         return v.upper()
 
+    @field_validator("redis_url")
+    def validate_redis_url(cls, v):
+        """Validate Redis URL format"""
+        if not v.startswith("redis://"):
+            raise ValueError("Redis URL must start with redis://")
+        return v
+
     class Config:
-        # Читаем переменные окружения из .env файла
+        # Read environment variables from .env file
         env_file = ".env"
         env_file_encoding = "utf-8"
-        
-        # Переменные окружения перезаписывают значения по умолчанию
+            
+        # Environment variables override default values
         case_sensitive = False
 
 
-# Создаем глобальный экземпляр настроек
-# Он автоматически загрузится при импорте модуля
+# Create a global instance of settings
+# It will be automatically loaded when the module is imported
 settings = Settings()
 
 
 def get_database_url() -> str:
-    """Получить URL базы данных"""
+    """Get the database URL"""
     return settings.database_url
 
+def get_redis_url() -> str:
+    """Get Redis connection URL"""
+    return settings.redis_url
 
 def get_keycloak_config() -> dict:
-    """Получить конфигурацию Keycloak"""
+    """Get Keycloak configuration"""
     return {
         "url": settings.keycloak_url,
         "realm": settings.keycloak_realm,
@@ -140,10 +194,10 @@ def get_keycloak_config() -> dict:
 
 
 def is_development() -> bool:
-    """Проверить, находимся ли мы в режиме разработки"""
+    """Check if we are in development mode"""
     return settings.debug
 
 
 def get_cors_origins() -> List[str]:
-    """Получить разрешенные origins для CORS"""
+    """Get allowed origins for CORS"""
     return settings.allowed_origins

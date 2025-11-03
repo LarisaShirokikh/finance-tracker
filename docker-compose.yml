@@ -37,6 +37,43 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis для кэширования и сессий
+  redis:
+    image: redis:7-alpine
+    container_name: finance_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass redis_dev_password
+    volumes:
+      - redis_data:/data
+    networks:
+      - finance_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    environment:
+      - REDIS_PASSWORD=redis_dev_password
+
+  # Redis Commander (Web UI для Redis)
+  redis_ui:
+    image: rediscommander/redis-commander:latest
+    container_name: finance_redis_ui
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:redis_dev_password
+      - HTTP_USER=admin
+      - HTTP_PASSWORD=admin123
+    ports:
+      - "8081:8081"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - finance_network
+    profiles:
+      - "full"  # Запускается только с --profile full
+
   # Keycloak Identity Provider
   keycloak:
     image: quay.io/keycloak/keycloak:22.0
@@ -81,6 +118,7 @@ services:
     container_name: finance_app
     environment:
       DATABASE_URL: postgresql://finance_user:finance_password@postgres:5432/finance_db
+      REDIS_URL: redis://:redis_dev_password@redis:6379/0
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_REALM: finance-realm
       KEYCLOAK_CLIENT_ID: finance-client
@@ -89,6 +127,8 @@ services:
       - "8000:8000"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       keycloak:
         condition: service_healthy
@@ -103,6 +143,7 @@ services:
 volumes:
   postgres_data:
   keycloak_postgres_data:
+  redis_data:
 
 networks:
   finance_network:
