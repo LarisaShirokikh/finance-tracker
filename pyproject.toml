@@ -3,7 +3,23 @@ name = "finance-tracker"
 version = "0.1.0"
 description = "Учебный проект: система домашнего учета финансов с OAuth авторизацией"
 authors = ["Student <student@example.com>"]
-package-mode = false
+readme = "README.md"
+homepage = "https://github.com/student/finance-tracker"
+repository = "https://github.com/student/finance-tracker"
+documentation = "https://github.com/student/finance-tracker/docs"
+keywords = ["fastapi", "oauth", "keycloak", "redis", "finance", "jwt"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Office/Business :: Financial",
+]
+
+# Настройка пакета для корректных импортов
+packages = [{include = "app"}]
 
 # Зависимости для production
 [tool.poetry.dependencies]
@@ -24,6 +40,13 @@ python-multipart = "^0.0.6"   # Поддержка multipart/form-data для Fa
 httpx = "^0.25.2"             # Async HTTP клиент для запросов к Keycloak
 cryptography = "^41.0.7"      # Криптографические функции
 
+# === CACHING & SESSIONS ===
+redis = "^5.0.0"              # Redis клиент для кэширования и сессий (с async поддержкой)
+itsdangerous = "^2.1.2"       # Для безопасной сериализации сессий
+
+# === COMPATIBILITY (для Python 3.12+) ===
+setuptools = "^69.0.0" 
+
 # === DATA VALIDATION ===
 pydantic = {extras = ["email"], version = "^2.5.0"}  # Валидация данных + email поддержка
 pydantic-settings = "^2.1.0"  # Управление настройками приложения
@@ -33,24 +56,31 @@ python-dateutil = "^2.8.2"    # Работа с датами
 email-validator = "^2.1.0"    # Валидация email адресов
 
 # Зависимости для разработки (не попадают в production)
-aioredis = "^2.0.1"
 [tool.poetry.group.dev.dependencies]
 # === TESTING ===
 pytest = "^7.4.3"            # Фреймворк для тестирования
 pytest-asyncio = "^0.21.1"   # Поддержка async/await в тестах
 pytest-cov = "^4.1.0"        # Покрытие кода тестами
-httpx = "^0.25.2"            # HTTP клиент для тестирования API
+pytest-xdist = "^3.3.1"      # Параллельное выполнение тестов
+pytest-mock = "^3.12.0"      # Mocking utilities для pytest
+pytest-timeout = "^2.2.0"    # Timeout для висящих тестов
+pytest-randomly = "^3.15.0"  # Случайный порядок тестов
+pytest-testmon = "^2.1.1"    # Запуск только измененных тестов
+pytest-watch = "^4.2.0"      # Watch mode для тестов
 
 # === CODE QUALITY ===
 black = "^23.11.0"           # Форматирование кода
 isort = "^5.12.0"            # Сортировка импортов
 flake8 = "^6.1.0"            # Линтер для проверки кода
 mypy = "^1.7.1"              # Статическая типизация
+bandit = "^1.7.5"            # Проверка безопасности
 pre-commit = "^3.6.0"        # Git hooks для проверки кода
 
 # === DEVELOPMENT TOOLS ===
 watchfiles = "^0.21.0"       # Автоперезагрузка при изменениях
 python-dotenv = "^1.0.0"     # Загрузка переменных окружения из .env
+ipython = "^8.18.0"          # Улучшенный Python REPL
+rich = "^13.7.0"             # Красивый вывод в консоль
 
 [build-system]
 requires = ["poetry-core"]

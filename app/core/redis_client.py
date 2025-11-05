@@ -15,8 +15,8 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 import logging
 
-import aioredis
-from aioredis import Redis
+import redis.asyncio as redis
+from redis.asyncio import Redis
 
 from app.core.config import settings
 
@@ -44,7 +44,7 @@ class RedisClient:
             redis_url = settings.redis_url
             
             # Create connection pool
-            self.redis = await aioredis.from_url(
+            self.redis = await redis.from_url(
                 redis_url,
                 encoding="utf-8",
                 decode_responses=True,
