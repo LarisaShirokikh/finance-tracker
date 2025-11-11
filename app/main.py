@@ -13,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 import logging
 
+from app.api import auth
+from app.api.v1.endpoints import categories
 from app.core.config import settings, get_cors_origins
 
 # Setup logging
@@ -37,9 +39,9 @@ async def lifespan(app: FastAPI):
     logger.info(f"Keycloak Realm: {settings.keycloak_realm}")
     logger.info(f"CORS origins: {get_cors_origins()}")
     logger.info("=" * 50)
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down Finance Tracker...")
 
@@ -47,13 +49,13 @@ async def lifespan(app: FastAPI):
 def create_application() -> FastAPI:
     """
     Application factory for creating FastAPI instance
-    
+
     This factory pattern allows:
     - Creating app with different settings for tests
     - Better control over initialization
     - Easier testing
     """
-    
+
     app = FastAPI(
         title=settings.project_name,
         description="Personal finance tracking system with OAuth authentication",
@@ -63,7 +65,7 @@ def create_application() -> FastAPI:
         openapi_url=f"{settings.api_v1_prefix}/openapi.json" if settings.debug else None,
         lifespan=lifespan,
     )
-    
+
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
@@ -72,64 +74,51 @@ def create_application() -> FastAPI:
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
         allow_headers=["*"],
     )
-    
+
     # Add session middleware for OAuth state management
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.secret_key,
         max_age=settings.oauth_state_ttl,
     )
-    
+
     # Register routers
     register_routers(app)
-    
+
     # Register base routes
     register_base_routes(app)
-    
+
     return app
 
 
 def register_routers(app: FastAPI) -> None:
     """Register API routers"""
+    # Auth router
     try:
-        
         app.include_router(
             auth.router,
-            prefix=f"{settings.api_v1_prefix}/auth",
+            prefix=f"{settings.api_v1_prefix}",
             tags=["Authentication"]
         )
         logger.info("✓ Auth router registered")
     except ImportError as e:
-        logger.warning(f"Could not import auth router from app.api.v1.endpoints: {e}")
-        try:
-            # Fallback: try importing from app.api
-            from app.api import auth
-            
-            app.include_router(
-                auth.router,
-                prefix=f"{settings.api_v1_prefix}/auth",
-                tags=["Authentication"]
-            )
-            logger.info("✓ Auth router registered (from app.api)")
-        except ImportError as e2:
-            logger.error(f"Could not import auth router: {e2}")
-    
-    # TODO: Add finance router when ready
-    # try:
-    #     from app.api.v1.endpoints import finance
-    #     app.include_router(
-    #         finance.router,
-    #         prefix=f"{settings.api_v1_prefix}/finance",
-    #         tags=["Finance"]
-    #     )
-    #     logger.info("✓ Finance router registered")
-    # except ImportError as e:
-    #     logger.warning(f"Finance router not available: {e}")
+        logger.error(f"Could not import auth router: {e}")
+
+    # Categories router
+    try:
+        app.include_router(
+            categories.router,
+            prefix=f"{settings.api_v1_prefix}/categories",
+            tags=["Categories"]
+        )
+        logger.info("✓ Categories router registered")
+    except ImportError as e:
+        logger.error(f"Could not import categories router: {e}")
 
 
 def register_base_routes(app: FastAPI) -> None:
     """Register base application routes"""
-    
+
     @app.get("/")
     async def root():
         """Root endpoint with API information"""
@@ -145,7 +134,7 @@ def register_base_routes(app: FastAPI) -> None:
                 "Personal Finance Tracking"
             ]
         }
-    
+
     @app.get("/health")
     async def health_check():
         """Health check endpoint"""
@@ -159,12 +148,12 @@ def register_base_routes(app: FastAPI) -> None:
                 "keycloak": "operational"
             }
         }
-    
+
     @app.get("/config")
     async def get_config():
         """
         Get application configuration (development only)
-        
+
         In production, this endpoint returns 404
         """
         if not settings.debug:
@@ -172,7 +161,7 @@ def register_base_routes(app: FastAPI) -> None:
                 status_code=404,
                 detail="Endpoint is only available in development mode"
             )
-        
+
         # Return only safe configuration (no secrets)
         return {
             "project_name": settings.project_name,
@@ -194,12 +183,12 @@ app = create_application()
 if __name__ == "__main__":
     """
     Development server entry point
-    
-    For production use: 
+
+    For production use:
     gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app
     """
     import uvicorn
-    
+
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",

@@ -39,7 +39,7 @@ class KeycloakJWTBearer:
     - Proper error handling and logging
     - Async operations
     """
-    
+
     def __init__(self, redis_client: RedisClient):
         self.keycloak_url = settings.keycloak_url
         self.realm = settings.keycloak_realm
@@ -49,17 +49,17 @@ class KeycloakJWTBearer:
     async def get_public_key(self) -> str:
         """
         Get public key for JWT validation with Redis caching
-        
+
         Flow:
         1. Check Redis cache first
-        2. If not cached, fetch from Keycloak  
+        2. If not cached, fetch from Keycloak
         3. Cache in Redis for future use
         4. Return PEM formatted key
         """
         try:
             # Try to get from Redis cache first
             jwks = await self.redis.get_keycloak_jwks()
-            
+
             if not jwks:
                 logger.debug("JWKS not in cache, fetching from Keycloak")
                 # Fetch from Keycloak if not cached
@@ -68,43 +68,43 @@ class KeycloakJWTBearer:
                     response = await client.get(jwks_url)
                     response.raise_for_status()
                     jwks = response.json()
-                    
+
                     if not jwks.get("keys"):
                         raise HTTPException(
                             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                             detail="Unable to get keys from Keycloak"
                         )
-                    
+
                     # Cache JWKS in Redis
                     await self.redis.set_keycloak_jwks(jwks)
                     logger.debug("JWKS fetched and cached")
             else:
                 logger.debug("JWKS retrieved from Redis cache")
-            
+
             # Convert first key to PEM format
             key_data = jwks["keys"][0]
-            
+
             # Import crypto libraries inside function
             from cryptography.hazmat.primitives.asymmetric import rsa
             from cryptography.hazmat.primitives import serialization
             import base64
-            
+
             # Decode RSA key parameters
             n = int.from_bytes(self._base64url_decode(key_data["n"]), "big")
             e = int.from_bytes(self._base64url_decode(key_data["e"]), "big")
-            
+
             # Create public key
             public_numbers = rsa.RSAPublicNumbers(e, n)
             public_key = public_numbers.public_key()
-            
+
             # Convert to PEM
             pem_key = public_key.public_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PublicFormat.SubjectPublicKeyInfo
             ).decode()
-            
+
             return pem_key
-                
+
         except httpx.RequestError as e:
             logger.error(f"Network error fetching JWKS: {e}")
             raise HTTPException(
@@ -129,7 +129,7 @@ class KeycloakJWTBearer:
         """Verify and decode JWT token
         Security checks:
         1. JWT signature validation
-        2. Audience verification  
+        2. Audience verification
         3. Issuer verification
         4. Expiration check
         5. Blacklist check (for instant logout)
@@ -138,7 +138,7 @@ class KeycloakJWTBearer:
             # First decode without verification to get JTI
             unverified_payload = jwt.get_unverified_claims(token)
             token_jti = unverified_payload.get("jti")
-            
+
             # Check if token is blacklisted (instant logout)
             if token_jti and await self.redis.is_token_blacklisted(token_jti):
                 logger.warning(f"Blacklisted token attempted: {token_jti}")
@@ -147,10 +147,10 @@ class KeycloakJWTBearer:
                     detail="Token has been revoked",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-            
+
             # Get public key for verification
             public_key = await self.get_public_key()
-            
+
             # Verify and decode token
             payload = jwt.decode(
                 token,
@@ -166,31 +166,11 @@ class KeycloakJWTBearer:
                     "verify_iat": True,
                 }
             )
-            
+
             logger.debug(f"Token verified successfully for user: {payload.get('sub')}")
             return payload
-            
-        except jwt.ExpiredSignatureError:
-            logger.warning("Expired token attempted")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has expired",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        except jwt.InvalidAudienceError:
-            logger.warning("Invalid audience in token")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token audience",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        except jwt.InvalidIssuerError:
-            logger.warning("Invalid issuer in token")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token issuer",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+
+
         except JWTError as e:
             logger.warning(f"JWT validation error: {e}")
             raise HTTPException(
@@ -203,14 +183,14 @@ class KeycloakJWTBearer:
     async def get_user_info(self, token: str) -> Dict[str, Any]:
         """Extract user information from token"""
         payload = await self.verify_token(token)
-        
+
         # Extract roles
         roles = []
         if "realm_access" in payload:
             roles.extend(payload["realm_access"].get("roles", []))
         if "resource_access" in payload and self.client_id in payload["resource_access"]:
             roles.extend(payload["resource_access"][self.client_id].get("roles", []))
-        
+
         user_info = {
             "user_id": payload.get("sub"),
             "username": payload.get("preferred_username"),
@@ -225,7 +205,7 @@ class KeycloakJWTBearer:
             "expires_at": payload.get("exp"),
             "issued_at": payload.get("iat"),
         }
-        
+
         logger.debug(f"User info extracted for: {user_info['username']}")
         return user_info
 
@@ -236,7 +216,7 @@ async def get_current_user(
 ) -> Dict[str, Any]:
     """
     FastAPI dependency to get current user
-    
+
     Usage:
     @app.get("/protected")
     async def protected_endpoint(user: dict = Depends(get_current_user)):
@@ -248,18 +228,18 @@ async def get_current_user(
             detail="Authorization required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Create JWT bearer instance with Redis
     jwt_bearer = KeycloakJWTBearer(redis)
-    
+
     try:
         user_info = await jwt_bearer.get_user_info(credentials.credentials)
-        
+
         # Increment login counter for analytics
         await redis.increment_counter(f"user_requests:{user_info['user_id']}")
-        
+
         return user_info
-        
+
     except HTTPException:
         # Re-raise HTTP exceptions as-is
         raise
@@ -281,7 +261,7 @@ async def get_optional_user(
     """
     if not credentials:
         return None
-    
+
     try:
         jwt_bearer = KeycloakJWTBearer(redis)
         return await jwt_bearer.get_user_info(credentials.credentials)
@@ -297,7 +277,7 @@ async def get_optional_user(
 def require_roles(required_roles: List[str]):
     """
     Dependency factory for role checking (RBAC)
-    
+
     Usage:
     @app.get("/admin")
     async def admin_endpoint(user: dict = Depends(require_roles(["admin"]))):
@@ -305,7 +285,7 @@ def require_roles(required_roles: List[str]):
     """
     async def check_roles(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
         user_roles = user.get("roles", [])
-        
+
         # Check if user has at least one of required roles
         if not any(role in user_roles for role in required_roles):
             logger.warning(
@@ -317,10 +297,10 @@ def require_roles(required_roles: List[str]):
                 detail=f"Required roles: {', '.join(required_roles)}. "
                        f"User has: {', '.join(user_roles)}"
             )
-        
+
         logger.debug(f"Role check passed for user {user['username']}")
         return user
-    
+
     return check_roles
 
 
@@ -331,7 +311,7 @@ def require_all_roles(required_roles: List[str]):
     """
     async def check_all_roles(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
         user_roles = user.get("roles", [])
-        
+
         missing_roles = [role for role in required_roles if role not in user_roles]
         if missing_roles:
             logger.warning(
@@ -343,10 +323,10 @@ def require_all_roles(required_roles: List[str]):
                 detail=f"Required all roles: {', '.join(required_roles)}. "
                        f"Missing: {', '.join(missing_roles)}"
             )
-        
+
         logger.debug(f"All roles check passed for user {user['username']}")
         return user
-    
+
     return check_all_roles
 
 async def revoke_token(
@@ -356,7 +336,7 @@ async def revoke_token(
 ) -> None:
     """
     Revoke a specific token (add to blacklist)
-    
+
     Args:
         token_jti: JWT ID to revoke
         expires_at: When token expires naturally
@@ -372,11 +352,11 @@ async def revoke_all_user_tokens(
 ) -> int:
     """
     Revoke all tokens for a user (global logout)
-    
+
     Args:
         user_id: User ID to revoke all tokens for
         redis: Redis client
-        
+
     Returns:
         Number of tokens revoked
     """
@@ -391,22 +371,14 @@ async def get_user_sessions(
 ) -> List[Dict[str, Any]]:
     """
     Get all active sessions for a user
-    
+
     Args:
         user_id: User ID
         redis: Redis client
-        
+
     Returns:
         List of active sessions
     """
     sessions = await redis.get_user_sessions(user_id)
     logger.debug(f"Retrieved {len(sessions)} sessions for user: {user_id}")
     return sessions
-
-
-
-
-
-
-
-
