@@ -36,7 +36,7 @@ class Category(Base, TimestampMixin):
     # Category info
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     type: Mapped[CategoryType] = mapped_column(SQLEnum(CategoryType), nullable=False)
-
+    description: Mapped[str] = mapped_column(String(100), nullable=False)
     # Visual customization
     color: Mapped[str | None] = mapped_column(
         String(7),

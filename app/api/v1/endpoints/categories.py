@@ -1,13 +1,14 @@
 """
 Category API endpoints
 """
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from app.auth.dependencies import get_current_user
 from app.crud import category as crud_category
+from app.crud import user as crud_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.category import CategoryCreate, CategoryResponse, CategoryUpdate
@@ -58,20 +59,33 @@ def get_category(
     return category
 
 
-@router.post("/", response_model=CategoryResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/",
+    response_model=CategoryResponse,
+    status_code=status.HTTP_201_CREATED
+    )
 def create_category(
     category_in: CategoryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Create new category
     """
+    db_user = crud_user.get_by_keycloak_id(db, current_user["user_id"])
+    if not db_user:
+        # Автоматически создаем пользователя при первом входе
+        db_user = crud_user.create_from_keycloak(
+            db=db,
+            keycloak_id=current_user["user_id"],
+            username=current_user["username"],
+            email=current_user["email"],
+            full_name=current_user.get("name")
+        )
     # Check if category with same name already exists
     existing = crud_category.get_by_name(
         db=db,
         name=category_in.name,
-        user_id=current_user.id
+        user_id=db_user.id
     )
     if existing:
         raise HTTPException(
@@ -79,7 +93,7 @@ def create_category(
             detail=f"Category with name '{category_in.name}' already exists"
         )
 
-    category = crud_category.create(db=db, obj_in=category_in, user_id=current_user.id)
+    category = crud_category.create(db=db, obj_in=category_in, user_id=db_user.id)
     return category
 
 
@@ -88,7 +102,7 @@ def update_category(
     category_id: int,
     category_in: CategoryUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Update category
@@ -105,7 +119,7 @@ def update_category(
         existing = crud_category.get_by_name(
             db=db,
             name=category_in.name,
-            user_id=current_user.id
+            user_id=current_user["user_id"]
         )
         if existing:
             raise HTTPException(
@@ -121,7 +135,7 @@ def update_category(
 def delete_category(
     category_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """
     Delete category
